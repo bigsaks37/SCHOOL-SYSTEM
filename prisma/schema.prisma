@@ -1,0 +1,292 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Configured for Cloud PostgreSQL (Neon, Supabase, Render, Railway, Vercel Postgres)
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SchoolProfile {
+  id         String   @id @default("default")
+  schoolName String   @default("Sankofa Preparatory & JHS")
+  motto      String   @default("Excellence, Integrity & Service")
+  address    String   @default("East Legon, Accra, Ghana")
+  phone      String   @default("+233 30 255 0148")
+  email      String   @default("info@sankofaschool.edu.gh")
+  gesCode    String   @default("GES-GA-0419")
+  currency   String   @default("GHS")
+  updatedAt  DateTime @updatedAt
+}
+
+model User {
+  id            String   @id @default(cuid())
+  staffId       String?  @unique // Auto-generated for staff/teachers e.g. "STF-2026-001"
+  fullName      String
+  email         String   @unique
+  phone         String?
+  qualification String?  // e.g. "B.Ed Basic Education"
+  subjects      String?  // Comma-separated GES subjects taught by a Teacher
+  passwordHash  String
+  // Roles: SUPER_ADMIN (Headmaster/Admin), BURSAR (Accountant), TEACHER, PARENT
+  role          String   @default("PARENT")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  assignedClasses  Classroom[]        @relation("ClassTeacher")
+  wards            Student[]          @relation("ParentWards")
+  recordedFees     FeePayment[]       @relation("RecordedBy")
+  markedAttendance AttendanceRecord[] @relation("MarkedBy")
+  recordedScores   Assessment[]       @relation("AssessedBy")
+  recordedCareLogs CrecheCareLog[]    @relation("CareLogBy")
+  approvedReports  TermReportCard[]   @relation("ReportApprovedBy")
+  announcements    Announcement[]     @relation("Author")
+  sentSmsLogs      SmsLog[]           @relation("SmsSentBy")
+}
+
+model AcademicTerm {
+  id                    String   @id @default(cuid())
+  academicYear          String   // e.g. "2026/2027"
+  termName              String   // "Term 1" | "Term 2" | "Term 3"
+  startDate             String   // YYYY-MM-DD
+  endDate               String   // YYYY-MM-DD
+  nextTermReopeningDate String?  // YYYY-MM-DD displayed on Terminal Report Cards
+  classScoreWeight      Int      @default(50) // 30 or 50 (Exam weight = 100 - classScoreWeight)
+  primaryGradingScale   String   @default("LETTER") // "LETTER" (A-F) or "BECE" (1-9)
+  isCurrent             Boolean  @default(false)
+  createdAt             DateTime @default(now())
+
+  feeStructures FeeStructure[]
+  feePayments   FeePayment[]
+  assessments   Assessment[]
+  reportCards   TermReportCard[]
+
+  @@unique([academicYear, termName])
+}
+
+model DepartmentSubject {
+  id         String   @id @default(cuid())
+  name       String
+  // CRECHE | KINDERGARTEN | PRIMARY | JHS
+  department String
+  // CORE | ELECTIVE | LEARNING_AREA
+  category   String   @default("CORE")
+  createdAt  DateTime @default(now())
+
+  @@unique([department, name])
+}
+
+model Classroom {
+  id         String   @id @default(cuid())
+  name       String   @unique // e.g. "Creche", "KG 1", "Basic 1", "JHS 1"
+  // 4 Ghanaian Basic School Departments:
+  // CRECHE | KINDERGARTEN | PRIMARY | JHS
+  department String   @default("PRIMARY")
+  capacity   Int      @default(30)
+  teacherId  String?
+  teacher    User?    @relation("ClassTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  students      Student[]
+  attendance    AttendanceRecord[]
+  careLogs      CrecheCareLog[]
+  feeStructures FeeStructure[]
+}
+
+model Student {
+  id            String     @id @default(cuid())
+  admissionNo   String     @unique // Unique Student ID e.g. "SPS-2026-001"
+  firstName     String
+  lastName      String
+  gender        String     // "MALE" | "FEMALE"
+  dateOfBirth   String?    // YYYY-MM-DD
+  nhisNumber    String?
+  guardianName  String?
+  guardianPhone String?
+  guardianNote  String?
+  // Status: ACTIVE | GRADUATED | TRANSFERRED
+  status        String     @default("ACTIVE")
+  classroomId   String?
+  classroom     Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  parentId      String?
+  parent        User?      @relation("ParentWards", fields: [parentId], references: [id], onDelete: SetNull)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  payments    FeePayment[]
+  attendance  AttendanceRecord[]
+  assessments Assessment[]
+  careLogs    CrecheCareLog[]
+  reportCards TermReportCard[]
+}
+
+model FeeStructure {
+  id          String       @id @default(cuid())
+  title       String
+  // TUITION | FEEDING | TRANSPORT | PTA | BOOKS | OTHER
+  category    String       @default("TUITION")
+  amount      Float        // Amount in GHS
+  // ALL | CRECHE | KINDERGARTEN | PRIMARY | JHS
+  department  String       @default("ALL")
+  // Optional: target a specific class (e.g. JHS 3 BECE fee)
+  classroomId String?
+  classroom   Classroom?   @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  termId      String
+  term        AcademicTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+}
+
+model FeePayment {
+  id            String       @id @default(cuid())
+  receiptNo     String       @unique
+  studentId     String
+  student       Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId        String
+  term          AcademicTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
+  amountPaid    Float        // Amount in GHS
+  // MOMO | CASH | BANK_TRANSFER
+  paymentMethod String       @default("MOMO")
+  // MTN | TELECEL | AT (optional when paymentMethod == MOMO)
+  momoNetwork   String?
+  // DESK | PAYSTACK_SIMULATION | PAYSTACK_LIVE
+  channel       String       @default("DESK")
+  feeItemLabel  String?      // Itemized description e.g. "Tuition & Feeding Fee"
+  reference     String?
+  notes         String?
+  recordedById  String?
+  recordedBy    User?        @relation("RecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  paidAt        DateTime     @default(now())
+}
+
+model AttendanceRecord {
+  id          String    @id @default(cuid())
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  date        String    // YYYY-MM-DD
+  // PRESENT | ABSENT | LATE | EXCUSED
+  status      String    @default("PRESENT")
+  remarks     String?
+  markedById  String?
+  markedBy    User?     @relation("MarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([studentId, date])
+}
+
+model Assessment {
+  id              String       @id @default(cuid())
+  studentId       String
+  student         Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId          String
+  term            AcademicTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
+  subject         String
+  // CORE | ELECTIVE | LEARNING_AREA
+  subjectCategory String       @default("CORE")
+  classScore      Float        @default(0)
+  examScore       Float        @default(0)
+  totalScore      Float        @default(0)
+  grade           String       @default("1")
+  // KG descriptive mastery: EXCEEDING | MEETING | DEVELOPING | NEEDS_SUPPORT
+  masteryRating   String?
+  remarks         String?
+  recordedById    String?
+  recordedBy      User?        @relation("AssessedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([studentId, termId, subject])
+}
+
+model TermReportCard {
+  id                String       @id @default(cuid())
+  studentId         String
+  student           Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId            String
+  term              AcademicTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
+  teacherRemarks    String?
+  conduct           String?
+  interest          String?
+  headmasterRemarks String?
+  // DRAFT | PENDING_APPROVAL | PUBLISHED
+  status            String       @default("DRAFT")
+  approvedById      String?
+  approvedBy        User?        @relation("ReportApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt        DateTime?
+  publishedAt       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([studentId, termId])
+}
+
+model Announcement {
+  id               String   @id @default(cuid())
+  title            String
+  content          String
+  // ALL | TEACHERS | PARENTS | STAFF
+  audience         String   @default("ALL")
+  // ALL | CRECHE | KINDERGARTEN | PRIMARY | JHS
+  targetDepartment String   @default("ALL")
+  pinned           Boolean  @default(false)
+  authorId         String?
+  author           User?    @relation("Author", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model SmsLog {
+  id             String   @id @default(cuid())
+  recipientName  String?
+  recipientPhone String
+  message        String
+  // ABSENCE_ALERT | FEE_RECEIPT | REPORT_PUBLISHED | BULK_PARENTS | BULK_DEBTORS | BULK_TEACHERS | MANUAL
+  eventType      String   @default("MANUAL")
+  // SIMULATION | ARKESEL | HUBTEL
+  provider       String   @default("SIMULATION")
+  // SIMULATED | SENT | FAILED
+  status         String   @default("SIMULATED")
+  providerRef    String?
+  sentById       String?
+  sentBy         User?    @relation("SmsSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+}
+
+model CrecheCareLog {
+  id                   String    @id @default(cuid())
+  studentId            String
+  student              Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classroomId          String
+  classroom            Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  date                 String    // YYYY-MM-DD
+
+  breakfastStatus      String    @default("ATE_ALL")
+  lunchStatus          String    @default("ATE_ALL")
+  feedingNotes         String?
+
+  napDuration          String?
+  sleepQuality         String    @default("PEACEFUL")
+
+  diaperChecks         Int       @default(2)
+  pottyNotes           String?
+  temperature          String?
+  mood                 String    @default("HAPPY")
+  healthNotes          String?
+
+  pickupAuthorizedName String?
+  pickupIdType         String?
+  pickupIdNumber       String?
+  pickupTime           String?
+  pickupVerified       Boolean   @default(false)
+
+  recordedById         String?
+  recordedBy           User?     @relation("CareLogBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([studentId, date])
+}
