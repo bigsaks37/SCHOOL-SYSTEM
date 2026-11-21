@@ -33,13 +33,21 @@ export function isRealtimeConfigured(): boolean {
   );
 }
 
-export const realtime = createRealtime({
-  secret:
-    process.env.NEON_REALTIME_SECRET ||
-    "placeholder-realtime-secret-for-build-only",
-  db: getPostgresDbName(),
-  debugMode: process.env.NODE_ENV === "development",
-});
+let cachedRealtime: ReturnType<typeof createRealtime> | null = null;
+
+export function getRealtime() {
+  if (cachedRealtime) return cachedRealtime;
+  const secret = process.env.NEON_REALTIME_SECRET;
+  if (!secret) {
+    throw new Error("NEON_REALTIME_SECRET is not configured.");
+  }
+  cachedRealtime = createRealtime({
+    secret,
+    db: getPostgresDbName(),
+    debugMode: process.env.NODE_ENV === "development",
+  });
+  return cachedRealtime;
+}
 
 export async function getAllowedAnnouncementFilters(user: {
   id: string;

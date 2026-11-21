@@ -7,9 +7,9 @@ import { isNeonAuthConfigured, neonAuth } from "@/lib/neonAuth";
 import { getAiGatewayStatus } from "@/lib/neonAi";
 import {
   getAllowedAnnouncementFilters,
+  getRealtime,
   isRealtimeConfigured,
   liveAnnouncementsQuery,
-  realtime,
 } from "@/lib/realtimeServer";
 
 export async function GET() {
@@ -135,7 +135,7 @@ export async function GET() {
     if (isRealtimeConfigured()) {
       const { audiences, departments } =
         await getAllowedAnnouncementFilters(user);
-      const sealed = await realtime.seal({
+      const sealed = await getRealtime().seal({
         query: liveAnnouncementsQuery(audiences, departments),
       });
       realtimeStatus = {

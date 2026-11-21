@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth";
 import {
   getAllowedAnnouncementFilters,
+  getRealtime,
   isRealtimeConfigured,
   liveAnnouncementsQuery,
-  realtime,
 } from "@/lib/realtimeServer";
 
 export async function POST() {
@@ -26,7 +26,7 @@ export async function POST() {
   try {
     const { audiences, departments } = await getAllowedAnnouncementFilters(user);
     const query = liveAnnouncementsQuery(audiences, departments);
-    const sealedQuery = await realtime.seal({ query });
+    const sealedQuery = await getRealtime().seal({ query });
 
     return NextResponse.json(
       {

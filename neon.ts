@@ -4,7 +4,10 @@ export default defineConfig({
   // Declare your Neon services here
   preview: {
     realtime: {
-      allowedOrigins: ["http://localhost:3000"],
+      allowedOrigins: [
+        "http://localhost:3000",
+        "https://school-system-beta-one.vercel.app",
+      ],
     },
   },
   auth: true,
