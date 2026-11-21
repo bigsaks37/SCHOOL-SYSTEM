@@ -23,6 +23,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { DASHBOARD_NAV, ROLE_META, type NavItem, type UserRole } from "@/lib/rbac";
+import { neonAuthClient } from "@/lib/neonAuthClient";
 
 const ICON_MAP: Record<NavItem["icon"], React.ComponentType<{ className?: string }>> = {
   LayoutDashboard,
@@ -81,7 +82,10 @@ export function DashboardShell({
 
   async function handleSignOut() {
     setSigningOut(true);
-    await fetch("/api/auth/logout", { method: "POST" });
+    await Promise.allSettled([
+      fetch("/api/auth/logout", { method: "POST" }),
+      neonAuthClient.signOut(),
+    ]);
     router.push("/login");
     router.refresh();
   }

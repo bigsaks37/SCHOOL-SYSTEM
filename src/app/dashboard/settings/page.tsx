@@ -13,6 +13,8 @@ import {
   BookOpen,
   SlidersHorizontal,
   Database,
+  Cloud,
+  RefreshCw,
 } from "lucide-react";
 import { ToastBanner, type ToastMessage } from "@/components/Toast";
 import { formatDate, DEPARTMENTS, type DepartmentKey } from "@/lib/format";
@@ -88,6 +90,39 @@ export default function SettingsPage() {
   >("CORE");
   const [addingSubject, setAddingSubject] = useState(false);
   const [loadingDemo, setLoadingDemo] = useState(false);
+  const [neonStatus, setNeonStatus] = useState<{
+    branch: string | null;
+    branchId: string | null;
+    services: {
+      postgres: { ok: boolean; pooled: boolean; unpooledConfigured: boolean; studentsCount?: number };
+      auth: { configured: boolean; hasActiveNeonSession: boolean; neonUserEmail: string | null };
+      functions: { configured: boolean; ok: boolean; url: string | null; httpStatus: number | null };
+      aiGateway: {
+        configured: boolean;
+        reachable: boolean;
+        totalModels: number;
+        enabledModels: Array<{ id: string }>;
+        unavailableReason: string | null;
+        recoveryUrl: string | null;
+      };
+      realtime: { configured: boolean; canSeal: boolean; urlConfigured: boolean };
+    };
+  } | null>(null);
+  const [checkingNeon, setCheckingNeon] = useState(false);
+
+  const loadNeonStatus = useCallback(async () => {
+    setCheckingNeon(true);
+    try {
+      const res = await fetch("/api/neon/status");
+      if (res.ok) {
+        setNeonStatus(await res.json());
+      }
+    } catch {
+      // ignore transient network errors
+    } finally {
+      setCheckingNeon(false);
+    }
+  }, []);
 
   async function handleLoadSampleData() {
     setLoadingDemo(true);
@@ -153,7 +188,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadSettings();
-  }, [loadSettings]);
+    loadNeonStatus();
+  }, [loadSettings, loadNeonStatus]);
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -168,9 +204,9 @@ export default function SettingsPage() {
           phone: profileForm.phone || null,
           ...(profileForm.newPassword
             ? {
-                currentPassword: profileForm.currentPassword,
-                newPassword: profileForm.newPassword,
-              }
+              currentPassword: profileForm.currentPassword,
+              newPassword: profileForm.newPassword,
+            }
             : {}),
         }),
       });
@@ -686,11 +722,10 @@ export default function SettingsPage() {
                     key={dept.key}
                     type="button"
                     onClick={() => setSubjectDeptTab(dept.key)}
-                    className={`rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold border transition cursor-pointer ${
-                      subjectDeptTab === dept.key
+                    className={`rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold border transition cursor-pointer ${subjectDeptTab === dept.key
                         ? "bg-emerald-700 text-white border-emerald-700"
                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    }`}
+                      }`}
                   >
                     {dept.label} ({count})
                   </button>
@@ -711,13 +746,12 @@ export default function SettingsPage() {
                   >
                     <span>{subj.name}</span>
                     <span
-                      className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                        subj.category === "CORE"
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${subj.category === "CORE"
                           ? "bg-emerald-100 text-emerald-800"
                           : subj.category === "ELECTIVE"
-                          ? "bg-sky-100 text-sky-800"
-                          : "bg-amber-100 text-amber-800"
-                      }`}
+                            ? "bg-sky-100 text-sky-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
                     >
                       {subj.category === "LEARNING_AREA"
                         ? "MILESTONE"
@@ -900,7 +934,134 @@ export default function SettingsPage() {
             </form>
           </section>
 
-          {/* 4. One-Click Demo / Sample Ghanaian School Data Loader */}
+          {/* 4. Neon Cloud Stack Live Status */}
+          <section className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Cloud className="h-5 w-5 text-emerald-700" />
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Neon Cloud Services ({neonStatus?.branch || "production"})
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Live connectivity across Neon Postgres, Neon Auth, Neon
+                    Functions, AI Gateway, and Neon Realtime.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={loadNeonStatus}
+                disabled={checkingNeon}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 cursor-pointer disabled:opacity-60"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${checkingNeon ? "animate-spin" : ""}`}
+                />
+                Refresh Status
+              </button>
+            </div>
+
+            {neonStatus ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+                <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/70">
+                  <p className="font-bold text-slate-900">Postgres</p>
+                  <p
+                    className={`mt-1 font-semibold ${neonStatus.services.postgres.ok
+                        ? "text-emerald-700"
+                        : "text-red-600"
+                      }`}
+                  >
+                    {neonStatus.services.postgres.ok ? "Connected" : "Offline"}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {neonStatus.services.postgres.pooled ? "Pooled" : "Direct"} &bull;{" "}
+                    {neonStatus.services.postgres.studentsCount ?? 0} students
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/70">
+                  <p className="font-bold text-slate-900">Neon Auth</p>
+                  <p
+                    className={`mt-1 font-semibold ${neonStatus.services.auth.configured
+                        ? "text-emerald-700"
+                        : "text-amber-700"
+                      }`}
+                  >
+                    {neonStatus.services.auth.configured
+                      ? "Configured"
+                      : "Not Configured"}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                    {neonStatus.services.auth.hasActiveNeonSession
+                      ? neonStatus.services.auth.neonUserEmail
+                      : "Managed Better Auth proxy ready"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/70">
+                  <p className="font-bold text-slate-900">Neon Functions</p>
+                  <p
+                    className={`mt-1 font-semibold ${neonStatus.services.functions.ok
+                        ? "text-emerald-700"
+                        : "text-amber-700"
+                      }`}
+                  >
+                    {neonStatus.services.functions.ok
+                      ? `Live (HTTP ${neonStatus.services.functions.httpStatus})`
+                      : "Unavailable"}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    hello School Pulse API
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/70">
+                  <p className="font-bold text-slate-900">AI Gateway</p>
+                  <p
+                    className={`mt-1 font-semibold ${neonStatus.services.aiGateway.enabledModels.length > 0
+                        ? "text-emerald-700"
+                        : neonStatus.services.aiGateway.reachable
+                          ? "text-amber-700"
+                          : "text-red-600"
+                      }`}
+                  >
+                    {neonStatus.services.aiGateway.enabledModels.length > 0
+                      ? `${neonStatus.services.aiGateway.enabledModels.length} Models Ready`
+                      : neonStatus.services.aiGateway.reachable
+                        ? `Reachable (${neonStatus.services.aiGateway.totalModels} models; credits needed)`
+                        : "Unavailable"}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {neonStatus.services.aiGateway.unavailableReason || "Ready"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/70">
+                  <p className="font-bold text-slate-900">Neon Realtime</p>
+                  <p
+                    className={`mt-1 font-semibold ${neonStatus.services.realtime.canSeal
+                        ? "text-emerald-700"
+                        : "text-amber-700"
+                      }`}
+                  >
+                    {neonStatus.services.realtime.canSeal
+                      ? "Sealed Live SQL Ready"
+                      : "Not Configured"}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Live Noticeboard stream
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Checking Neon services...
+              </p>
+            )}
+          </section>
+
+          {/* 5. One-Click Demo / Sample Ghanaian School Data Loader */}
           <section className="bg-white rounded-2xl border border-amber-200/90 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="h-10 w-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">

@@ -1,6 +1,6 @@
 # Sankofa SMS — Complete School Management System for Private Basic Schools in Ghana
 
-A complete, original, mobile-first full-stack School Management System built with **Next.js 15 (App Router, TypeScript)**, **Tailwind CSS v4**, **Prisma ORM**, and **SQLite** (drop-in ready for **PostgreSQL**), tailored specifically to Ghana's private basic school ecosystem.
+A complete, original, mobile-first full-stack School Management System built with **Next.js 15 (App Router, TypeScript)**, **Tailwind CSS v4**, **Prisma ORM**, and **Neon** (**Postgres**, **Neon Auth**, **Neon AI Gateway**, **Neon Functions**, and **Neon Realtime**), tailored specifically to Ghana's private basic school ecosystem.
 
 ## Complete 5-Phase Feature Set
 
@@ -47,9 +47,11 @@ This project is pre-configured for **PostgreSQL** via `DATABASE_URL` in `prisma/
    - `PAYSTACK_PUBLIC_KEY` / `PAYSTACK_SECRET_KEY` / `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY` (optional; Simulation Mode works if left as placeholders)
    - `SMS_PROVIDER` (`ARKESEL` or `HUBTEL`), `ARKESEL_API_KEY` or `HUBTEL_CLIENT_ID` / `HUBTEL_CLIENT_SECRET`, `SMS_SENDER_ID` (optional; SMS Outbox Log Mode works if blank)
 3. **Push Schema to Cloud PostgreSQL** (one-time or in Build Command):
+
    ```bash
    npx prisma db push
    ```
+
    - **Vercel Build Command**: `npx prisma db push && npm run build` (or run `npx prisma db push` once against your cloud DB and keep default `npm run build`).
    - **Render Build Command**: `npm install && npx prisma db push && npm run build` and **Start Command**: `npm run start`.
 4. **First-Run Automatic Seeding**:

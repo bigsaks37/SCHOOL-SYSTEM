@@ -28,12 +28,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  // Protect API routes (except login & logout)
-  if (
-    pathname.startsWith("/api/") &&
-    !pathname.startsWith("/api/auth/login") &&
-    !pathname.startsWith("/api/auth/logout")
-  ) {
+  // Protect API routes (except auth endpoints — login, logout, Neon Auth proxy, bridge; /api/auth/me enforces session internally)
+  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth/")) {
     if (!session) {
       return NextResponse.json(
         { error: "Unauthorized. Please sign in." },

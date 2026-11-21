@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME, signSessionToken } from "@/lib/auth";
 import { normalizeGhanaPhone } from "@/lib/smsService";
-import { ensureInitialAdminSeeded } from "@/lib/bootstrap";
+import { ensureInitialAdminSeeded, formatDatabaseError } from "@/lib/bootstrap";
 import type { UserRole } from "@/lib/rbac";
 
 const loginSchema = z.object({
@@ -116,10 +116,19 @@ export async function POST(request: Request) {
 
     return response;
   } catch (err) {
-    console.error("Login error:", err);
+    const diag = formatDatabaseError(err);
+    console.error("[POST /api/auth/login] Login failed:", {
+      status: diag.status,
+      code: diag.code,
+      message: diag.message,
+      error: err,
+    });
     return NextResponse.json(
-      { error: "Unable to process login right now." },
-      { status: 500 }
+      {
+        error: diag.message,
+        code: diag.code,
+      },
+      { status: diag.status }
     );
   }
 }

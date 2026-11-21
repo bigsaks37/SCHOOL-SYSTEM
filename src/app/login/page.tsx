@@ -15,7 +15,10 @@ import {
   ArrowRight,
   Lock,
   Mail,
+  UserPlus,
+  Sparkles,
 } from "lucide-react";
+import { neonAuthClient } from "@/lib/neonAuthClient";
 
 const DEMO_ACCOUNTS = [
   {
@@ -62,6 +65,9 @@ const DEMO_ACCOUNTS = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const [authTab, setAuthTab] = useState<"school" | "neon">("school");
+  const [neonMode, setNeonMode] = useState<"signin" | "signup">("signin");
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -74,6 +80,43 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      if (authTab === "neon") {
+        const result =
+          neonMode === "signup"
+            ? await neonAuthClient.signUp.email({
+              email: email.trim(),
+              password,
+              name: fullName.trim() || email.trim().split("@")[0],
+            })
+            : await neonAuthClient.signIn.email({
+              email: email.trim(),
+              password,
+            });
+
+        if (result.error) {
+          setError(result.error.message || "Neon Auth authentication failed.");
+          setLoading(false);
+          return;
+        }
+
+        const bridgeRes = await fetch("/api/auth/neon-bridge", {
+          method: "POST",
+        });
+        const bridgeData = await bridgeRes.json();
+        if (!bridgeRes.ok) {
+          setError(
+            bridgeData.error ||
+            "Signed in with Neon Auth, but could not bridge school role."
+          );
+          setLoading(false);
+          return;
+        }
+
+        router.push("/dashboard");
+        router.refresh();
+        return;
+      }
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -178,6 +221,53 @@ export default function LoginPage() {
               Enter your school credentials to access your role dashboard.
             </p>
 
+            <div className="mt-4 grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthTab("school");
+                  setError(null);
+                }}
+                className={`rounded-lg py-2 transition cursor-pointer ${authTab === "school"
+                    ? "bg-white text-emerald-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                  }`}
+              >
+                School Portal Login
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthTab("neon");
+                  setError(null);
+                }}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-2 transition cursor-pointer ${authTab === "neon"
+                    ? "bg-white text-emerald-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                  }`}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                Neon Auth
+              </button>
+            </div>
+
+            {authTab === "neon" && (
+              <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                <span>Managed Better Auth (email + password)</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNeonMode((m) => (m === "signin" ? "signup" : "signin"));
+                    setError(null);
+                  }}
+                  className="font-semibold text-emerald-700 hover:underline cursor-pointer inline-flex items-center gap-1"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  {neonMode === "signin" ? "Create account" : "Have an account?"}
+                </button>
+              </div>
+            )}
+
             {error && (
               <div className="mt-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 font-medium">
                 {error}
@@ -185,23 +275,49 @@ export default function LoginPage() {
             )}
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              {authTab === "neon" && neonMode === "signup" && (
+                <div>
+                  <label
+                    htmlFor="fullName"
+                    className="block text-sm font-medium text-slate-700 mb-1.5"
+                  >
+                    Full Name
+                  </label>
+                  <input
+                    id="fullName"
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="e.g. Akua Mensah"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+                  />
+                </div>
+              )}
+
               <div>
                 <label
                   htmlFor="email"
                   className="block text-sm font-medium text-slate-700 mb-1.5"
                 >
-                  Email Address or Registered Phone Number
+                  {authTab === "neon"
+                    ? "Email Address"
+                    : "Email Address or Registered Phone Number"}
                 </label>
                 <div className="relative">
                   <Mail className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     id="email"
-                    type="text"
+                    type={authTab === "neon" ? "email" : "text"}
                     required
                     autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@sankofa.edu.gh or +233 24 900 4411"
+                    placeholder={
+                      authTab === "neon"
+                        ? "you@sankofa.edu.gh"
+                        : "you@sankofa.edu.gh or +233 24 900 4411"
+                    }
                     className="w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
                   />
                 </div>
@@ -249,11 +365,17 @@ export default function LoginPage() {
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Signing in...
+                    {authTab === "neon" && neonMode === "signup"
+                      ? "Creating Neon Auth account..."
+                      : "Signing in..."}
                   </>
                 ) : (
                   <>
-                    Sign In
+                    {authTab === "neon"
+                      ? neonMode === "signup"
+                        ? "Sign Up with Neon Auth"
+                        : "Sign In with Neon Auth"
+                      : "Sign In"}
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}

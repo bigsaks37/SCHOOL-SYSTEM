@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Pin, Pencil, Trash2, Loader2, Megaphone } from "lucide-react";
+import { Plus, Pin, Pencil, Trash2, Loader2, Megaphone, Sparkles, Radio } from "lucide-react";
+import { useLiveQuery } from "@neon/realtime-react";
+import type { SealedLiveQuery } from "@neon/realtime/client";
 import { Modal } from "@/components/Modal";
 import { ToastBanner, type ToastMessage } from "@/components/Toast";
 import {
@@ -11,6 +13,7 @@ import {
   type DepartmentKey,
 } from "@/lib/format";
 import { ROLE_META, type UserRole } from "@/lib/rbac";
+import type { LiveAnnouncementRow } from "@/lib/realtimeServer";
 
 interface AnnouncementItem {
   id: string;
@@ -38,6 +41,51 @@ const emptyForm = {
   pinned: false,
 };
 
+function LiveNoticeboardSync({
+  sealedQuery,
+  refreshQuery,
+  onRows,
+  onStatus,
+}: {
+  sealedQuery: SealedLiveQuery<LiveAnnouncementRow>;
+  refreshQuery: () => Promise<SealedLiveQuery<LiveAnnouncementRow>>;
+  onRows: (rows: AnnouncementItem[]) => void;
+  onStatus: (status: string) => void;
+}) {
+  const { data, status } = useLiveQuery(sealedQuery, { refreshQuery });
+
+  useEffect(() => {
+    onStatus(status);
+  }, [status, onStatus]);
+
+  useEffect(() => {
+    if (!data) return;
+    onRows(
+      data.map((row) => ({
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        audience: row.audience,
+        targetDepartment: row.targetDepartment,
+        pinned: Boolean(row.pinned),
+        createdAt:
+          row.createdAt instanceof Date
+            ? row.createdAt.toISOString()
+            : String(row.createdAt),
+        author: row.authorId
+          ? {
+              id: row.authorId,
+              fullName: row.authorFullName || "School Administration",
+              role: row.authorRole || "SUPER_ADMIN",
+            }
+          : null,
+      }))
+    );
+  }, [data, onRows]);
+
+  return null;
+}
+
 export default function AnnouncementsPage() {
   const [currentUser, setCurrentUser] = useState<{
     id: string;
@@ -46,11 +94,30 @@ export default function AnnouncementsPage() {
   const [items, setItems] = useState<AnnouncementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [sealedQuery, setSealedQuery] =
+    useState<SealedLiveQuery<LiveAnnouncementRow> | null>(null);
+  const [realtimeStatus, setRealtimeStatus] = useState<string>("idle");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [aiDrafting, setAiDrafting] = useState(false);
+
+  const fetchSealedAnnouncements = useCallback(async () => {
+    const res = await fetch("/api/realtime/announcements", { method: "POST" });
+    if (!res.ok) throw new Error("Failed to seal live announcements query");
+    const json = await res.json();
+    return json.sealedQuery as SealedLiveQuery<LiveAnnouncementRow>;
+  }, []);
+
+  const handleLiveRows = useCallback((rows: AnnouncementItem[]) => {
+    setItems(rows);
+  }, []);
+
+  const handleLiveStatus = useCallback((st: string) => {
+    setRealtimeStatus(st);
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -77,7 +144,49 @@ export default function AnnouncementsPage() {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    fetchSealedAnnouncements()
+      .then((sq) => setSealedQuery(sq))
+      .catch(() => setRealtimeStatus("offline"));
+  }, [loadData, fetchSealedAnnouncements]);
+
+  async function handleAiDraft() {
+    const topic =
+      form.title.trim() ||
+      `School announcement for ${AUDIENCE_LABELS[form.audience]} in ${
+        DEPARTMENT_LABELS[form.targetDepartment] || "All Departments"
+      }`;
+    setAiDrafting(true);
+    setToast(null);
+    try {
+      const res = await fetch("/api/ai/assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "announcement",
+          prompt: `Topic: ${topic}. Audience: ${AUDIENCE_LABELS[form.audience]}. Department: ${
+            DEPARTMENT_LABELS[form.targetDepartment] || "All Departments"
+          }. Draft a concise, warm notice for Sankofa Preparatory & JHS in Accra, Ghana.`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setToast({
+          type: "error",
+          text: data.error || "Neon AI Gateway could not generate a draft.",
+        });
+      } else {
+        setForm((prev) => ({ ...prev, content: data.text }));
+        setToast({
+          type: "success",
+          text: `Drafted with Neon AI Gateway (${data.model}).`,
+        });
+      }
+    } catch {
+      setToast({ type: "error", text: "Network error contacting Neon AI Gateway." });
+    } finally {
+      setAiDrafting(false);
+    }
+  }
 
   function openCreate() {
     setEditingId(null);
@@ -148,13 +257,30 @@ export default function AnnouncementsPage() {
 
   return (
     <div className="space-y-5">
+      {sealedQuery && (
+        <LiveNoticeboardSync
+          key={sealedQuery.queryFingerprint}
+          sealedQuery={sealedQuery}
+          refreshQuery={fetchSealedAnnouncements}
+          onRows={handleLiveRows}
+          onStatus={handleLiveStatus}
+        />
+      )}
       <ToastBanner toast={toast} onDismiss={() => setToast(null)} />
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900">
-            School Noticeboard &amp; Announcements
-          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900">
+              School Noticeboard &amp; Announcements
+            </h2>
+            {realtimeStatus === "live" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
+                <Radio className="h-3 w-3 animate-pulse text-emerald-600" />
+                Live via Neon Realtime
+              </span>
+            )}
+          </div>
           <p className="text-xs sm:text-sm text-slate-500">
             Target circulars to Everyone, Teachers Only, Parents Only, or a
             specific department (Creche, KG, Primary, JHS).
@@ -345,9 +471,24 @@ export default function AnnouncementsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Message Content *
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700">
+                Message Content *
+              </label>
+              <button
+                type="button"
+                onClick={handleAiDraft}
+                disabled={aiDrafting}
+                className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 px-2.5 py-1 text-[11px] font-bold cursor-pointer disabled:opacity-60"
+              >
+                {aiDrafting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3 w-3" />
+                )}
+                Draft with Neon AI
+              </button>
+            </div>
             <textarea
               required
               rows={5}

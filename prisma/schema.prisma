@@ -2,10 +2,11 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Configured for Cloud PostgreSQL (Neon, Supabase, Render, Railway, Vercel Postgres)
+// Configured for Cloud PostgreSQL (Neon Postgres: pooled DATABASE_URL + direct DATABASE_URL_UNPOOLED)
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 model SchoolProfile {

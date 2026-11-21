@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../src/lib/prisma";
 import { seedGhanaSchoolDemo } from "../src/lib/demoSeeder";
-
-const prisma = new PrismaClient();
 
 async function main() {
   console.log("Seeding Sankofa Preparatory & JHS (Complete Ghanaian Basic SMS)...");
